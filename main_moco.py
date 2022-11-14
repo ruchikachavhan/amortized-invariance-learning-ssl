@@ -58,7 +58,7 @@ parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet50',
 parser.add_argument('-j', '--workers', default=32, type=int, metavar='N',
                     help='number of data loading workers (default: 32)')
 parser.add_argument('--output_dir', default = '/raid/s2265822/hyper-contrastive-learning/', type=str)
-parser.add_argument('--epochs', default=1000, type=int, metavar='N',
+parser.add_argument('--epochs', default=200, type=int, metavar='N',
                     help='number of total epochs to run')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
@@ -206,7 +206,7 @@ def main_worker(gpu, ngpus_per_node, args):
         else:
             model = moco.builder.MoCo_ViT(
                 partial(vits.PromptVisionTransformerMoCo),
-                baseline=args.baseline, dim=args.moco_dim, mlp_dim=args.moco_mlp_dim, T=args.moco_t)
+                baseline=args.baseline, arch = args.arch, dim=args.moco_dim, mlp_dim=args.moco_mlp_dim, T=args.moco_t)
     else:
         if args.baseline:
             model = moco.builder.MoCo_ResNet(
@@ -215,7 +215,7 @@ def main_worker(gpu, ngpus_per_node, args):
         else:
             model = moco.builder.MoCo_ResNet(
                 partial(hyper_resnet.resnet50), 
-                baseline=args.baseline, dim=args.moco_dim, mlp_dim=args.moco_mlp_dim, T=args.moco_t)
+                baseline=args.baseline,  arch = args.arch, dim=args.moco_dim, mlp_dim=args.moco_mlp_dim, T=args.moco_t)
     
 
 
@@ -406,7 +406,7 @@ def main_worker(gpu, ngpus_per_node, args):
         train_dataset, batch_size=args.batch_size, shuffle=(train_sampler is None),
         num_workers=args.workers, pin_memory=True, sampler=train_sampler, drop_last=True)
 
-    invariances = get_invariances(args.k_augs, args.baseline)
+    invariances = get_invariances(args.k_augs, args.baseline, args.auto_augment)
     fname = get_file_name(args)
     args = check_expt_configs(args)
     print(args)
@@ -414,11 +414,6 @@ def main_worker(gpu, ngpus_per_node, args):
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
             train_sampler.set_epoch(epoch)
-
-        # train for one epoch
-        # Form invariances 
-        
-        # Check before training
 
         train(train_loader, model, criterion, optimizer, scaler, summary_writer, epoch, args, invariances)
 

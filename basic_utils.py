@@ -2,9 +2,16 @@ import itertools
 import torch
 import os
 
-def get_invariances(k_augs, baseline):
+def get_invariances(k_augs, baseline, auto_augment):
     if baseline:
         invariances = None
+    elif auto_augment:
+        inv_list = [list(i) for i in itertools.product([0.0, 1.0], repeat=14)]
+        new_list = []
+        for i in inv_list:
+            if sum(i) == 2.0:
+                new_list.append(i)
+        invariances = [torch.tensor(new_list[k]) for k in range(0, len(new_list))]
     elif k_augs:
         inv_list = [list(i) for i in itertools.product([0.0, 1.0], repeat=5)]
         new_list = []

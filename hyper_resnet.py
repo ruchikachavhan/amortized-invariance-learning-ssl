@@ -432,7 +432,7 @@ class Bottleneck(nn.Module):
         self.first_dilation = first_dilation
         self.cardinality = cardinality
 
-        self.emb1 = nn.Linear(2, 16, bias=False)
+        self.emb1 = nn.Linear(14, 16, bias=False)
         # self.emb3 = nn.Linear(2, 16)
         self.hypernet1 = HyperNetwork(f_size = 1, in_size = inplanes, out_size = first_planes)
         self.hypernet2 = HyperNetwork(f_size = 3, in_size = first_planes, out_size = width)
