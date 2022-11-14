@@ -33,13 +33,11 @@ import torchvision.models as torchvision_models
 # from sklearn.metrics import r2_score
 from r2score import r2_score
 import vits
-import hypervits
 import inspect
 
 from torch.utils.data import DataLoader, ConcatDataset, Subset
 from torch.autograd import Variable
-from ImageModels.hypertimm.models import resnet as hyper_resnet
-from vit_test import PromptViT
+import hyper_resnet
 from torchvision.datasets import DTD, SUN397, ImageFolder, OxfordIIITPet
 # Test dataset info
 from test_datasets import Flowers, CelebA, CIFAR10_rotation, FacesInTheWild300W, Caltech101, LeedsSportsPose
