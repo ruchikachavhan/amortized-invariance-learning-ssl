@@ -165,7 +165,7 @@ def prepare_data(args, norm, shots=None):
 
     elif dataset_info[args.test_dataset]['splits'][1] == 'train':
         trainval = get_dataset(args, dataset_info[args.test_dataset]['class'],
-                              dataset_info[args.test_dataset]['dir'], 'trainval', transform, shots)
+                              dataset_info[args.test_dataset]['dir'], 'train', transform, shots)
 
     test = get_dataset(args, dataset_info[args.test_dataset]['class'],
                        dataset_info[args.test_dataset]['dir'], 'test', transform, shots)
@@ -431,7 +431,7 @@ def main_worker(gpu, ngpus_per_node, args):
         learn_inv = Variable(torch.tensor([0.9504, 0.7267])).cuda()
         # learn_inv.requires_grad_()
         parameters = list(filter(lambda p: p.requires_grad, model.parameters()))
-        optimizer_model = torch.optim.Adam(parameters, lr=init_lr, weight_decay = args.weight_decay)
+        optimizer_model = torch.optim.SGD(parameters, lr=init_lr, weight_decay = args.weight_decay)
         optimizer_inv = torch.optim.Adam([learn_inv], lr = 0.1)
         optimizer = [optimizer_model, optimizer_inv]
 
