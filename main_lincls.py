@@ -242,6 +242,8 @@ parser.add_argument('--image_size', default=224, type=int,
 
 parser.add_argument('--few_shot_reg', default=None, type=float,
                     help='image size')
+parser.add_argument('--finetune_layer', default=-1, type=int, required=True, help = "4: layer 4, 3: layer 3, 2: layer 2, 1:layer 1, 0: conv1")
+
 
 best_acc1 = 0
 
@@ -371,8 +373,22 @@ def main_worker(gpu, ngpus_per_node, args):
                 if name not in ['%s.weight' % linear_keyword, '%s.bias' % linear_keyword] and 'bn' not in name:
                     param.requires_grad = False
                 print(name, param.requires_grad)
-
-    # infer learning rate before changing batch size, not done in hyoer-models
+    else:
+        # make trainable layer-wise for different experiments
+        for name, param in model.named_parameters():
+            if name.startswith('layer'):
+                layer_num = name.split(".")[0].split("layer")[-1]
+                if int(layer_num) >= args.finetune_layer:
+                     param.requires_grad = True
+                else:
+                    param.requires_grad = False
+            elif name in ['conv1.weight', 'bn1.weight', 'bn1.bias']:
+                if args.finetune_layer == 0 :
+                    param.requires_grad = True
+                else:
+                    param.requires_grad = False
+            print(name, param.requires_grad)
+    # infer learning rate before changing batch size, not done in hyper-models
     init_lr = args.lr 
 
     if not torch.cuda.is_available():
@@ -428,8 +444,8 @@ def main_worker(gpu, ngpus_per_node, args):
                                  momentum=args.momentum,
                                 weight_decay = 0.)
     else:
-        learn_inv = Variable(torch.tensor([0.9504, 0.7267])).cuda()
-        # learn_inv.requires_grad_()
+        learn_inv = Variable(torch.tensor([0.5, 0.5])).cuda()
+        learn_inv.requires_grad_()
         parameters = list(filter(lambda p: p.requires_grad, model.parameters()))
         optimizer_model = torch.optim.SGD(parameters, lr=init_lr, weight_decay = args.weight_decay)
         optimizer_inv = torch.optim.Adam([learn_inv], lr = 0.1)
@@ -510,16 +526,17 @@ def main_worker(gpu, ngpus_per_node, args):
 
     if args.baseline:
         if not args.finetune:
-            fname = "manyshot_"+ args.test_dataset + "_" + args.arch + "_" + "baseline.json"
+            fname = args.test_dataset + "_" + args.arch + "_" + "baseline.json"
         else:
-            fname = "manyshot_" + args.test_dataset + "_" + args.arch + "_" + "baseline_finetune.json"
+            args.exp_name = "finetune_layer_" + str(args.finetune_layer)
+            fname = args.exp_name + "_" + args.test_dataset + "_" + args.arch + "_" + "baseline.json"
     else:
-        fname = "manyshot_" + args.test_dataset + "_" + args.arch + "_hyper.json"
+        fname = args.test_dataset + "_" + args.arch + "_hyper.json"
         
     log_json = open(os.path.join("results/", fname), "w")
 
     results_dict = []
- 
+    save_dict = {}
     for epoch in range(args.start_epoch, args.epochs):
         start = torch.cuda.Event(enable_timing=True)
         end = torch.cuda.Event(enable_timing=True)
@@ -535,7 +552,7 @@ def main_worker(gpu, ngpus_per_node, args):
             adjust_learning_rate(optimizer[1], init_lr, epoch, args)
 
         # train for one epoch
-        train(train_loader, model, criterion, optimizer, epoch, args, learn_inv)
+        batch_accurcy_list, hinge_loss_avg = train(train_loader, model, criterion, optimizer, epoch, args, learn_inv)
         end.record()
         # Waits for everything to finish running
         torch.cuda.synchronize()
@@ -551,23 +568,25 @@ def main_worker(gpu, ngpus_per_node, args):
             if learn_inv[1] >=0.5:
                 discretized_inv[1] = 1.0
             
-            acc1 = validate(val_loader, model, criterion, args, discretized_inv)
+            acc1, val_accuracy_list = validate(val_loader, model, criterion, args, discretized_inv)
         else:
-            acc1 = validate(val_loader, model, criterion, args, learn_inv)
+            acc1, val_accuracy_list = validate(val_loader, model, criterion, args, learn_inv)
         if not args.baseline:
             print("Invariance hyper-parameters", learn_inv)
         # remember best acc@1 and save checkpoint
-        is_best = acc1 > best_acc1
-        best_acc1 = max(acc1, best_acc1)
-
-        epoch_results["accuracy"] = acc1
-        epoch_results["time"] = time
-        results_dict.append(epoch_results)
-        print(epoch_results)
+        # is_best = acc1 > best_acc1
+        # best_acc1 = max(acc1, best_acc1)
     
-    save_dict = {}
-    save_dict["Results"] = results_dict
-    json.dump(results_dict, log_json)
+        epoch_results['Epoch'] = epoch
+        epoch_results['training hinge loss'] = hinge_loss_avg
+        epoch_results['training accuracy'] = batch_accurcy_list
+        epoch_results["val avg accuracy"] = acc1
+        epoch_results['validation accuracy'] = val_accuracy_list
+        epoch_results["time"] = time
+    
+        save_dict[str(epoch)] = epoch_results
+    print(save_dict)
+    json.dump(save_dict, log_json)
 
 def train(train_loader, model, criterion, optimizer, epoch, args, learn_inv):
     batch_time = AverageMeter('Time', ':6.3f')
@@ -591,6 +610,10 @@ def train(train_loader, model, criterion, optimizer, epoch, args, learn_inv):
     model.eval()
 
     end = time.time()
+    batch_accurcy_list = []
+
+    hinge_loss = nn.MultiMarginLoss()
+    hinge_loss_avg = 0.0
     for i, (images, target) in enumerate(train_loader):
         # measure data loading time
         data_time.update(time.time() - end)
@@ -628,6 +651,7 @@ def train(train_loader, model, criterion, optimizer, epoch, args, learn_inv):
         top1.update(acc1[0], images.size(0))
         top5.update(acc5[0], images.size(0))
        
+        batch_accurcy_list.append(acc1[0].item())
 
         # compute gradient and do SGD step
         if args.baseline:
@@ -642,6 +666,10 @@ def train(train_loader, model, criterion, optimizer, epoch, args, learn_inv):
             optimizer[1].step()
             learn_inv.data.clamp_(0.0, 1.0) # Clamp invariances between 0 and 1
 
+        if dataset_info[args.test_dataset]['mode'] == 'classification':
+            hinge_loss_avg += hinge_loss(output, target).item()
+        else:
+            hinge_loss_avg += nn.functional.l1_loss(output, target).item()
         # measure elapsed time
         batch_time.update(time.time() - end)
         end = time.time()
@@ -649,6 +677,8 @@ def train(train_loader, model, criterion, optimizer, epoch, args, learn_inv):
         if i % args.print_freq == 0:
             progress.display(i)
 
+
+    return batch_accurcy_list, hinge_loss_avg/(i+1)
 
 def validate(val_loader, model, criterion, args, learn_inv):
     batch_time = AverageMeter('Time', ':6.3f')
@@ -663,7 +693,7 @@ def validate(val_loader, model, criterion, args, learn_inv):
     # switch to evaluate mode
     model.eval()
     avg_acc = 0.0
-
+    batch_accurcy_list = []
     with torch.no_grad():
         end = time.time()
         for i, (images, target) in enumerate(val_loader):
@@ -695,6 +725,8 @@ def validate(val_loader, model, criterion, args, learn_inv):
             top1.update(acc1[0], images.size(0))
             top5.update(acc5[0], images.size(0))
             avg_acc += acc1[0]
+
+            batch_accurcy_list.append(acc1[0].item())
             # measure elapsed time
             batch_time.update(time.time() - end)
             end = time.time()
@@ -705,7 +737,7 @@ def validate(val_loader, model, criterion, args, learn_inv):
         # TODO: this should also be done with the ProgressMeter
         print(' * Acc@1 {top1.avg:.3f} Acc@5 {top5.avg:.3f}'
               .format(top1=top1, top5=top5))
-    return top1.avg
+    return top1.avg.item(), batch_accurcy_list
 
 
 def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):

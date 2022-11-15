@@ -132,8 +132,9 @@ parser.add_argument('--base_augs', default='all', type=str,
 parser.add_argument('--image_size', default=224, type=int,
                     help='image size')
 
-parser.add_argument('--k_augs', action='store_true', help = "If this is true, then k-bit augmentation vectors are used. This arg is to be used only for simclr training")
-parser.add_argument('--auto_augment', action='store_true', help = "If this is true, then k-bit augmentation vectors are used. This arg is to be used only for simclr training")
+parser.add_argument('--k_augs', action='store_true', help = "If this is true, then 5-bit augmentation vectors are used. This arg is to be used only for simclr training")
+parser.add_argument('--auto_augment', action='store_true', help = "If this is true, then 14-bit augmentation vectors are used. This arg is to be used only for simclr training")
+
 
 def main():
     args = parser.parse_args()
@@ -363,7 +364,7 @@ def main_worker(gpu, ngpus_per_node, args):
                     transforms.RandomApply([AutoContrast()], p=0.8),
                     transforms.RandomApply([Equalize()], p=0.8),
                     transforms.RandomApply([Invert()], p=0.8),
-                ]
+    ]
 
     # Data loaders 
     # If baseline, then we use augmentations that are given by base_augs

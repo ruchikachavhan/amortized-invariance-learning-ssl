@@ -238,17 +238,21 @@ class MoCo(nn.Module):
             q = self.predictor(self.base_encoder(x1, inv))
             q = nn.functional.normalize(q, dim=1)
 
-            with torch.no_grad():  # no gradient
-                self._update_momentum_encoder(m)  # update the momentum encoder
-                if not simclr_train:
-                    x2, idx_unshuffle = self._batch_shuffle_ddp(x2)
+            # Use base encoder for simclr and momentum encoder for moco
+            if simclr_train: 
+                k = self.base_encoder(x2, inv)
+            else:
+                with torch.no_grad():  # no gradient
+                    self._update_momentum_encoder(m)  # update the momentum encoder
+                    if not simclr_train:
+                        x2, idx_unshuffle = self._batch_shuffle_ddp(x2)
 
-                # compute momentum features as targets
-                # This is k2 in original moco paper
-                k = self.momentum_encoder(x2, inv)
-                k = nn.functional.normalize(k, dim=1)
-                if not simclr_train: # Only shuffle batches is training for moco
-                    k = self._batch_unshuffle_ddp(k, idx_unshuffle)
+                    # compute momentum features as targets
+                    # This is k2 in original moco paper
+                    k = self.momentum_encoder(x2, inv)
+                    k = nn.functional.normalize(k, dim=1)
+                    if not simclr_train: # Only shuffle batches is training for moco
+                        k = self._batch_unshuffle_ddp(k, idx_unshuffle)
 
         if simclr_train: # Contrastive loss for simclr, Simclr not supported for ViT
             loss, logits, labels = self.contrastive_loss(q, k)
@@ -259,8 +263,10 @@ class MoCo(nn.Module):
                 # k (here) corresponds to k2 and k2 (here) corresponds to k1 from moco-v3: Change this later for less confusion
                 q2 = self.predictor(self.base_encoder(x2, inv))
                 k2 = self.momentum_encoder(x1, inv)
+                cl1, logits, labels = self.contrastive_loss(q, k)
+                cl2, _, _ = self.contrastive_loss(q2, k2)
                 # contrastive loss for (q1, k2) + (q2, k1)
-                return self.contrastive_loss(q, k) + self.contrastive_loss(q2, k2)
+                return cl1 + cl2, logits, labels
             else:
                 l_pos = torch.einsum('nc,nc->n', [q, k]).unsqueeze(-1)
                 
