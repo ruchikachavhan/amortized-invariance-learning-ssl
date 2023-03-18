@@ -1,6 +1,6 @@
 # amortized-invariance-learning-ssl
 
-This is the official implementation of the ICLR 2023 paper - Amortised Invariance Learning for Contrastive Self-Supervision. 
+This is the official implementation of the ICLR 2023 paper - [Amortised Invariance Learning for Contrastive Self-Supervision](https://arxiv.org/abs/2302.12712). 
 
 ## Requirements
 This code base has been tested with the following package versions:
@@ -62,6 +62,19 @@ We implemented Amortised ViTs using prompting. To pre-train the Prompt-ViT on Im
 To run downstream experiments, for example on CIFAR10, run 
 ```
 main_lincls.py --test_dataset cifar10 --pretrained saved_models/<name of checkpoint> 
+```
+
+If you find our work helpful, please cite our paper
+
+```
+@inproceedings{
+chavhan2023amortised,
+title={Amortised Invariance Learning for Contrastive Self-Supervision},
+author={Ruchika Chavhan and Henry Gouk and Jan Stuehmer and Calum Heggan and Mehrdad Yaghoobi and Timothy Hospedales},
+booktitle={The Eleventh International Conference on Learning Representations },
+year={2023},
+url={https://openreview.net/forum?id=nXOhmfFu5n}
+}
 ```
 Results will be stored in ```results/```
 
