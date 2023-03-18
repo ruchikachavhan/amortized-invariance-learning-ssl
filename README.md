@@ -63,6 +63,8 @@ To run downstream experiments, for example on CIFAR10, run
 ```
 main_lincls.py --test_dataset cifar10 --pretrained saved_models/<name of checkpoint> 
 ```
+Results will be stored in ```results/```
+
 
 If you find our work helpful, please cite our paper
 ```
@@ -75,6 +77,7 @@ year={2023},
 url={https://openreview.net/forum?id=nXOhmfFu5n}
 }
 ```
-Results will be stored in ```results/```
+
+
 
 
