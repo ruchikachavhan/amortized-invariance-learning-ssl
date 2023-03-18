@@ -42,7 +42,7 @@ In our paper, we perform pre-training experiments with ResNet50 and ViTs with Mo
 
 ### ResNet50
 
-We parameterise the ResNet50 backbone in the form of a hypernetwork. To pre-train the hypernetwork on ImageNet-100:
+We parameterise the ResNet50 backbone in the form of a hypernetwork. To pre-train the hypernetwork on ImageNet-100 with 4-GPUs:
 
 ```
 python main_moco.py -a resnet50 --lr 0.0005 --weight-decay 2e-5 --moco-t 0.1 --moco-mlp-dim 2048 --moco-dim 128 --warmup-epochs 0 --batch-size 128  --optimizer adamw --dist-url 'tcp://localhost:10001' --multiprocessing-distributed --world-size 1 --rank 0 --data ../image-net100 
@@ -52,9 +52,9 @@ Models will be stored in ```saved_models/```
 
 ### ViT (base)
 
-We implemented Amortised ViTs using prompting. To pre-train the Prompt-ViT on ImageNet:
+We implemented Amortised ViTs using prompting. To pre-train the Prompt-ViT on ImageNet with 8-GPUs:
 ```
- python main_moco.py -a vit_base --lr 1.5e-4 --weight-decay 0.1 --stop-grad-conv1 --moco-t 0.2 --moco-m-cos --moco-mlp-dim 4096 --moco-dim 256  --batch-size 128  --warmup-epochs=40 --epochs 300 --dist-url 'tcp://localhost:8008' --multiprocessing-distributed --world-size 1 --rank 0 --data ../../imagenet1k
+ python main_moco.py -a vit_base --lr 1.5e-4 --weight-decay 0.1 --stop-grad-conv1 --moco-t 0.2 --moco-m-cos --moco-mlp-dim 4096 --moco-dim 256  --batch-size 1024  --warmup-epochs=40 --epochs 300 --dist-url 'tcp://localhost:8008' --multiprocessing-distributed --world-size 1 --rank 0 --data ../../imagenet1k
 ```
 
 ## Downstream training
