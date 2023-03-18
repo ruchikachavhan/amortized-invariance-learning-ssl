@@ -24,7 +24,6 @@ import tllib.vision.datasets as datasets
 import torchvision.models as torchvision_models
 from sklearn.metrics import r2_score
 from torch.autograd import Variable
-# Test dataset info
 import wandb
 from downstream_utils import *
 import json
@@ -60,7 +59,7 @@ parser.add_argument('-b', '--batch-size', default=16, type=int,
                     help='mini-batch size (default: 1024), this is the total '
                          'batch size of all GPUs on all nodes when '
                          'using Data Parallel or Distributed Data Parallel')
-parser.add_argument('--lr', '--learning-rate', default=0.1, type=float,
+parser.add_argument('--lr', '--learning-rate', default=0.01, type=float,
                     metavar='LR', help='initial (base) learning rate', dest='lr')
 parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
                     help='momentum')
@@ -226,14 +225,14 @@ def main_worker(gpu, ngpus_per_node, args):
         parameters = list(filter(lambda p: p.requires_grad, model.parameters()))
         learn_inv= None
         optimizer = torch.optim.Adam(parameters, args.lr,
-                                #  momentum=args.momentum,
+                                momentum=args.momentum,
                                 weight_decay = 0.)
     else:
         learn_inv = Variable(torch.tensor([0.5, 0.5])).cuda()
         learn_inv.requires_grad_()
         parameters = list(filter(lambda p: p.requires_grad, model.parameters()))
         optimizer_model = torch.optim.SGD(parameters, lr=init_lr, weight_decay = args.weight_decay, momentum=0.9)
-        optimizer_inv = torch.optim.SGD([learn_inv], lr = 0.1)
+        optimizer_inv = torch.optim.SGD([learn_inv], lr = init_lr)
         optimizer = [optimizer_model, optimizer_inv]
 
     # optionally resume from a checkpoint
