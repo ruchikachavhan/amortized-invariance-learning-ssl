@@ -61,7 +61,7 @@ We implemented Amortised ViTs using prompting. First, download the moco-v3 model
 
 To run downstream experiments, for example on CIFAR10, run 
 ```
-main_lincls.py --test_dataset cifar10 --pretrained saved_models/<name of checkpoint> 
+python main_lincls.py --test_dataset cifar10 --pretrained saved_models/<name of checkpoint> 
 ```
 Results will be stored in ```results/```
 
