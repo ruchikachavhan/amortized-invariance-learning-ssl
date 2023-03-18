@@ -16,3 +16,4 @@ wandb/
 *.pt
 *.pth.tar
 r2score.py
+auto_augment.py
