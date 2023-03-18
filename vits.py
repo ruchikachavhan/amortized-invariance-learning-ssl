@@ -22,7 +22,6 @@ __all__ = [
     'vit_conv_base',
 ]
 
-
 def load_vit(path):
     linear_keyword = 'head'
     ckpt = torch.load(path)
