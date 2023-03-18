@@ -48,19 +48,6 @@ class MoCo(nn.Module):
         self.baseline = baseline
         self.arch = arch
 
-        # Make a resnet loaded with baseline
-        # self.teacher_model = resnet50(pretrained=False, num_classes = dim)
-        # self.teacher_model.fc = nn.Sequential(nn.Linear(2048, 2048), nn.ReLU(), self.teacher_model.fc)
-        
-        # if arch == 'resnet50':
-        # ckpt = torch.load('../moco/moco_v2_800ep_pretrain.pth.tar')
-
-        # # ckpt = get_state_dict(ckpt['state_dict'])
-        # self.teacher_model.load_state_dict(ckpt)
-
-        # for name, p in self.teacher_model.named_parameters():
-        #     p.requires_grad = False
-
         self._build_projector_and_predictor_mlps(dim, mlp_dim)
 
         for param_b, param_m in zip(self.base_encoder.parameters(), self.momentum_encoder.parameters()):
@@ -84,10 +71,6 @@ class MoCo(nn.Module):
             self.register_buffer("queue_default", torch.randn(dim, K))
             self.queue_default = nn.functional.normalize(self.queue_default, dim=0)
             self.register_buffer("queue_ptr_default", torch.zeros(1, dtype=torch.long))
-
-            # self.register_buffer("queue_teacher", torch.randn(dim, K))
-            # self.queue_teacher = nn.functional.normalize(self.queue_teacher, dim=0)
-            # self.register_buffer("queue_ptr_default", torch.zeros(1, dtype=torch.long))
 
     def _build_mlp(self, num_layers, input_dim, mlp_dim, output_dim, last_bn=True, use_bn = True):
         mlp = []
@@ -270,9 +253,7 @@ class MoCo(nn.Module):
         else: 
             if self.arch == 'resnet50':
                 q = self.base_encoder.predictor_b[inv_index](self.base_encoder(x1, inv))
-                # q_t = self.teacher_model(x1)
                 q = nn.functional.normalize(q, dim=1)
-                # q_t = nn.functional.normalize(q_t, dim=1)
 
                 with torch.no_grad():  # no gradient
                     self._update_momentum_encoder(m)  # update the momentum encoder
@@ -280,11 +261,8 @@ class MoCo(nn.Module):
 
                     # compute momentum features as targets
                     k = self.momentum_encoder.predictor_m[inv_index](self.momentum_encoder(x2, inv))
-                    # k_t = self.teacher_model(x2)
                     k = nn.functional.normalize(k, dim=1)
                     k = self._batch_unshuffle_ddp(k, idx_unshuffle)
-                    # k_t = nn.functional.normalize(k_t, dim=1)
-                    # k_t = self._batch_unshuffle_ddp(k_t, idx_unshuffle)
 
         # If Architecture is ViT-base, then we use moco-v3 loss
         if self.arch == 'vit_base':
@@ -300,30 +278,24 @@ class MoCo(nn.Module):
             # contrastive loss for (q1, k2) + (q2, k1)
             return cl1 + cl2, logits, labels
         else:
-            # Loss and logits calculated for Resnet50-baseline, Resnet50-hyper 
+            # Loss and logits calculated for Resnet50-hyper 
             l_pos = torch.einsum('nc,nc->n', [q, k]).unsqueeze(-1)
-            # l_pos_t = torch.einsum('nc,nc->n', [q_t, k_t]).unsqueeze(-1)
             # negative logits: NxK
             if self.baseline:
                 l_neg = torch.einsum('nc,ck->nk', [q, self.queue.clone().detach()])
             else: # Queue supported only for dorsal, ventral and default
                 if inv_index == 0:
                     l_neg = torch.einsum('nc,ck->nk', [q, self.queue_dorsal.clone().detach()])
-                    # l_neg_t = torch.einsum('nc,ck->nk', [q_t, self.queue_dorsal.clone().detach()])
                 elif inv_index == 1:
                     l_neg = torch.einsum('nc,ck->nk', [q, self.queue_ventral.clone().detach()])
-                    # l_neg_t = torch.einsum('nc,ck->nk', [q_t, self.queue_ventral.clone().detach()])
                 elif inv_index == 2:
                     l_neg = torch.einsum('nc,ck->nk', [q, self.queue_default.clone().detach()])
-                    # l_neg_t = torch.einsum('nc,ck->nk', [q_t, self.queue_default.clone().detach()])
 
             # logits: Nx(1+K)
             logits = torch.cat([l_pos, l_neg], dim=1)
-            # logits_t = torch.cat([l_pos_t, l_neg_t], dim=1)
 
             # apply temperature
             logits /= self.T
-            # logits_t /= self.T
 
             # labels: positive key indicators
             labels = torch.zeros(logits.shape[0], dtype=torch.long).cuda()
@@ -339,7 +311,6 @@ class MoCo(nn.Module):
                 elif inv_index ==2:
                     self._dequeue_and_enqueue_default(k)
             loss =  nn.CrossEntropyLoss()(logits, labels) * 0.9 
-            # + get_kl_loss(logits, logits_t)
         
             return loss, logits, labels
 
@@ -370,7 +341,7 @@ class MoCo_ViT(MoCo):
         self.momentum_encoder.head = nn.ModuleList([self._build_mlp(3, hidden_dim, mlp_dim, dim) for _ in range(0, self.inv_dim+1)])
 
         # predictor
-        self.predictor = nn.ModuleList([self._build_mlp(2, dim, mlp_dim, dim, use_bn = False) for _ in range(0, self.inv_dim+1)])
+        self.predictor = nn.ModuleList([self._build_mlp(2, dim, mlp_dim, dim, use_bn = True) for _ in range(0, self.inv_dim+1)])
 
 # utils
 @torch.no_grad()
@@ -385,30 +356,3 @@ def concat_all_gather(tensor):
 
     output = torch.cat(tensors_gather, dim=0)
     return output
-
-def get_kl_loss(inputs, target, criterion=torch.nn.KLDivLoss(reduction = "batchmean"), T=6.0, alpha=0.1):
-    kl_div = criterion(F.log_softmax(inputs/T, dim=1), F.softmax(target/T, dim=1)) * (alpha * T * T)
-    return kl_div
-
-# Testing
-# model = MoCo_ResNet(
-#                 partial(hyper_resnet.resnet50), 
-#                 baseline=False,  arch = 'resnet50', dim=256, mlp_dim=2048, T=1.0)
-# print(model)
-# x1 = torch.randn(2, 3, 224, 224)
-# x2 = torch.randn(2, 3, 224, 224)
-# inv = torch.tensor([0.0, 1.0])
-# loss, logits, labels = model(x1, x2, 0.9, inv, 0)
-# print(loss, logits, labels)
-
-# model = MoCo_ViT(
-#                 vits.PromptVisionTransformerMoCo, 
-#                 baseline=False,  arch = 'vit_base', inv_dim = 2, dim=256, mlp_dim=2048, T=1.0)
-# for name, param in model.base_encoder.named_parameters():
-#     if 'inv_fc' not in name:
-#         print(name, param.shape)
-# x1 = torch.randn(2, 3, 224, 224)
-# x2 = torch.randn(2, 3, 224, 224)
-# inv = torch.tensor([0.0, 1.0])
-# loss, logits, labels = model(x1, x2, 0.9, inv, 0)
-# print(loss, logits, labels)
