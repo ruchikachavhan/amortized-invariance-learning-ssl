@@ -65,7 +65,6 @@ main_lincls.py --test_dataset cifar10 --pretrained saved_models/<name of checkpo
 ```
 
 If you find our work helpful, please cite our paper
-
 ```
 @inproceedings{
 chavhan2023amortised,
