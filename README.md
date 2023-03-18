@@ -52,7 +52,7 @@ Models will be stored in ```saved_models/```
 
 ### ViT (base)
 
-We implemented Amortised ViTs using prompting. To pre-train the Prompt-ViT on ImageNet with 8-GPUs:
+We implemented Amortised ViTs using prompting. First, download the moco-v3 model for initialisation of Prompt-ViT from [this link](https://dl.fbaipublicfiles.com/moco-v3/vit-b-300ep/vit-b-300ep.pth.tar) . To pre-train the Prompt-ViT on ImageNet with 8-GPUs:
 ```
  python main_moco.py -a vit_base --lr 1.5e-4 --weight-decay 0.1 --stop-grad-conv1 --moco-t 0.2 --moco-m-cos --moco-mlp-dim 4096 --moco-dim 256  --batch-size 1024  --warmup-epochs=40 --epochs 300 --dist-url 'tcp://localhost:8008' --multiprocessing-distributed --world-size 1 --rank 0 --data ../../imagenet1k
 ```
