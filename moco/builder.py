@@ -239,7 +239,6 @@ class MoCo(nn.Module):
         if self.baseline:  # Baseline here is only for ResNet50
             q = self.predictor(self.base_encoder(x1))
             q = nn.functional.normalize(q, dim=1)
-            # q2 = self.predictor(self.base_encoder(x2, inv))
 
             with torch.no_grad():  # no gradient
                 self._update_momentum_encoder(m)  # update the momentum encoder
@@ -310,7 +309,7 @@ class MoCo(nn.Module):
                     self._dequeue_and_enqueue_ventral(k)
                 elif inv_index ==2:
                     self._dequeue_and_enqueue_default(k)
-            loss =  nn.CrossEntropyLoss()(logits, labels) * 0.9 
+            loss =  nn.CrossEntropyLoss()(logits, labels)
         
             return loss, logits, labels
 
