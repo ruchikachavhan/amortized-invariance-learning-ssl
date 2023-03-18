@@ -13,7 +13,7 @@ from functools import partial
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+import numpy as np
 from timm.data import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 from timm.models.helpers import build_model_with_cfg, checkpoint_seq
 from timm.models.layers import DropBlock2d, DropPath, AvgPool2dSame, BlurPool2d, GroupNorm, create_attn, get_attn, create_classifier
@@ -406,18 +406,20 @@ class HyperNetwork(nn.Module):
         self.in_size = in_size
 
         self.layer = nn.Sequential(nn.Linear(z_dim, z_dim*2), nn.ReLU(), nn.Linear(self.z_dim*2, self.out_size*self.in_size*self.f_size*self.f_size))
-        
+
     def forward(self, z):
         h_final = self.layer(z)
         kernel = h_final.view(self.out_size, self.in_size, self.f_size, self.f_size)
 
         return kernel
 
+                
+
 class Bottleneck(nn.Module):
     expansion = 4
 
     def __init__(
-            self, inplanes, planes, stride=1, downsample=None, cardinality=1, base_width=64,
+            self, inv_dim, inplanes, planes, stride=1, downsample=None, cardinality=1, base_width=64,
             reduce_first=1, dilation=1, first_dilation=None, act_layer=nn.ReLU, norm_layer=nn.BatchNorm2d,
             attn_layer=None, aa_layer=None, drop_block=None, drop_path=None):
         super(Bottleneck, self).__init__()
@@ -432,8 +434,7 @@ class Bottleneck(nn.Module):
         self.first_dilation = first_dilation
         self.cardinality = cardinality
 
-        self.emb1 = nn.Linear(14, 16, bias=False)
-        # self.emb3 = nn.Linear(2, 16)
+        self.emb1 = nn.Linear(inv_dim, 16, bias=False)
         self.hypernet1 = HyperNetwork(f_size = 1, in_size = inplanes, out_size = first_planes)
         self.hypernet2 = HyperNetwork(f_size = 3, in_size = first_planes, out_size = width)
         self.hypernet3 = HyperNetwork(f_size = 1, in_size = width, out_size = outplanes)
@@ -551,7 +552,7 @@ def drop_blocks(drop_prob=0.):
 
 
 def make_blocks(
-        block_fn, channels, block_repeats, inplanes, reduce_first=1, output_stride=32,
+        block_fn, inv_dim, channels, block_repeats, inplanes, reduce_first=1, output_stride=32,
         down_kernel_size=1, avg_down=False, drop_block_rate=0., drop_path_rate=0., **kwargs):
     stages = []
     feature_info = []
@@ -582,7 +583,7 @@ def make_blocks(
             stride = stride if block_idx == 0 else 1
             block_dpr = drop_path_rate * net_block_idx / (net_num_blocks - 1)  # stochastic depth linear decay rule
             blocks.append(block_fn(
-                inplanes, planes, stride, downsample, first_dilation=prev_dilation,
+                inv_dim, inplanes, planes, stride, downsample, first_dilation=prev_dilation,
                 drop_path=DropPath(block_dpr) if block_dpr > 0. else None, **block_kwargs))
             prev_dilation = dilation
             inplanes = planes * block_fn.expansion
@@ -652,7 +653,7 @@ class ResNet(nn.Module):
     """
 
     def __init__(
-            self, block, layers, num_classes=1000, in_chans=3, output_stride=32, global_pool='avg',
+            self, block, layers, inv_dim, num_classes=1000, in_chans=3, output_stride=32, global_pool='avg',
             cardinality=1, base_width=64, stem_width=64, stem_type='', replace_stem_pool=False, block_reduce_first=1,
             down_kernel_size=1, avg_down=False, act_layer=nn.ReLU, norm_layer=nn.BatchNorm2d, aa_layer=None,
             drop_rate=0.2, drop_path_rate=0., drop_block_rate=0., zero_init_last=True, block_args=None):
@@ -708,7 +709,7 @@ class ResNet(nn.Module):
         # Feature Blocks
         channels = [64, 128, 256, 512]
         stage_modules, stage_feature_info = make_blocks(
-            block, channels, layers, inplanes, cardinality=cardinality, base_width=base_width,
+            block, inv_dim, channels, layers, inplanes, cardinality=cardinality, base_width=base_width,
             output_stride=output_stride, reduce_first=block_reduce_first, avg_down=avg_down,
             down_kernel_size=down_kernel_size, act_layer=act_layer, norm_layer=norm_layer, aa_layer=aa_layer,
             drop_block_rate=drop_block_rate, drop_path_rate=drop_path_rate, **block_args)
@@ -788,7 +789,7 @@ class ResNet(nn.Module):
 
     def forward(self, x, inv, inv_index=None):
         x = self.forward_features(x, inv)
-        x = self.forward_head(x, inv_index)
+        x = self.forward_head(x)
         return x
 
 
@@ -877,7 +878,7 @@ def resnet26d(pretrained=False, **kwargs):
 def resnet50(pretrained=False, **kwargs):
     """Constructs a ResNet-50 model.
     """
-    model_args = dict(block=Bottleneck, layers=[3, 4, 6, 3],  **kwargs)
+    model_args = dict(block=Bottleneck, layers=[3, 4, 6, 3], **kwargs)
     return _create_resnet('resnet50', pretrained, **model_args)
 
 

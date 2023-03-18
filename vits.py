@@ -21,7 +21,8 @@ __all__ = [
     'vit_conv_small',
     'vit_conv_base',
 ]
-# ""
+
+
 def load_vit(path):
     linear_keyword = 'head'
     ckpt = torch.load(path)
@@ -36,14 +37,16 @@ def load_vit(path):
     return state_dict
     
 class PromptVisionTransformerMoCo(VisionTransformer):
-    def __init__(self, stop_grad_conv1=False, **kwargs):
+    def __init__(self, baseline_path='/raid/s2265822/hyper-contrastive-learning/vit-b-300ep.pth.tar', inv_dim = 2, num_inv_fc = 128, stop_grad_conv1=False, **kwargs):
         super().__init__(**kwargs)
         
         # Load MoCo pretrained model
-        state_dict = load_vit("/raid/s2265822/hyper-contrastive-learning/vit-b-300ep.pth.tar")
-        msg = self.load_state_dict(state_dict, strict=False)
-        self.inv_fc = nn.ModuleList([nn.Sequential(nn.Linear(2, self.embed_dim), nn.ReLU(), nn.Linear(self.embed_dim, self.embed_dim)) for i in range(0, 256)])
-        
+        state_dict = load_vit(baseline_path)
+        self.load_state_dict(state_dict, strict=False)
+        self.num_inv_fc = num_inv_fc
+        self.inv_fc = nn.ModuleList([nn.Sequential(nn.Linear(inv_dim, self.embed_dim), nn.ReLU(), nn.Linear(self.embed_dim, self.embed_dim)) for i in range(0, num_inv_fc)])
+        del state_dict
+
         # Sto gradient of patch projection layer according to moco-v3
         if isinstance(self.patch_embed, PatchEmbed):
             # xavier_uniform initialization
@@ -83,7 +86,7 @@ class PromptVisionTransformerMoCo(VisionTransformer):
                 x = torch.cat((self.cls_token.expand(x.shape[0], -1, -1), x), dim=1)
 
             # Concatenate inv tokens 
-            inv_tokens = torch.cat([self.inv_fc[i](inv).view(1, 1, self.embed_dim) for i in range(0, 256)], dim = 1)
+            inv_tokens = torch.cat([self.inv_fc[i](inv).view(1, 1, self.embed_dim) for i in range(0, self.num_inv_fc)], dim = 1)
             inv_token = inv_token.mean(1).unsqueeze(1)
             if inv_tokens is not None:
                 x = torch.cat((inv_tokens.expand(x.shape[0], x.shape[1], -1), x), dim=2)
@@ -92,7 +95,7 @@ class PromptVisionTransformerMoCo(VisionTransformer):
         else:
             # original ., JAX, and deit vit impl
             # pos_embed has entry for class token, concat then add
-            inv_tokens = torch.cat([self.inv_fc[i](inv).view(1, 1, self.embed_dim) for i in range(0, 256)], dim = 1)
+            inv_tokens = torch.cat([self.inv_fc[i](inv).view(1, 1, self.embed_dim) for i in range(0, self.num_inv_fc)], dim = 1)
             inv_tokens = inv_tokens.mean(1).unsqueeze(1)
 
             if inv_tokens is not None:
@@ -114,16 +117,16 @@ class PromptVisionTransformerMoCo(VisionTransformer):
         
         return x
 
-    def forward_head(self, x, pre_logits: bool = False):
+    def forward_head(self, x, inv_index, pre_logits: bool = False):
         if self.global_pool:
             x = x[:, self.num_prefix_tokens:].mean(dim=1) if self.global_pool == 'avg' else x[:, 0]
         
         x = self.fc_norm(x)
-        return self.head(x)
+        return self.head[inv_index](x)
 
-    def forward(self, x, inv):
+    def forward(self, x, inv, inv_index):
         x = self.forward_features(x, inv)
-        x = self.forward_head(x)
+        x = self.forward_head(x, inv_index)
         return x
 
 

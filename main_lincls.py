@@ -1,11 +1,3 @@
-#!/usr/bin/env python
-
-# Copyright (c) Facebook, Inc. and its affiliates.
-# All rights reserved.
-
-# This source code is licensed under the license found in the
-# LICENSE file in the root directory of this source tree.
-
 import argparse
 import builtins
 from codecs import namereplace_errors
@@ -28,149 +20,15 @@ import torch.multiprocessing as mp
 import torch.utils.data
 import torch.utils.data.distributed
 import torchvision.transforms as transforms
-import torchvision.datasets as datasets
+import tllib.vision.datasets as datasets
 import torchvision.models as torchvision_models
-# from sklearn.metrics import r2_score
-from r2score import r2_score
-import vits
-import inspect
-
-from torch.utils.data import DataLoader, ConcatDataset, Subset
+from sklearn.metrics import r2_score
 from torch.autograd import Variable
-import hyper_resnet
-from torchvision.datasets import DTD, SUN397, ImageFolder, OxfordIIITPet
 # Test dataset info
-from test_datasets import Flowers, CelebA, CIFAR10_rotation, FacesInTheWild300W, Caltech101, LeedsSportsPose
 import wandb
+from downstream_utils import *
 import json
 
-dataset_info = {
-    'imagenet': {
-        'class': datasets.CIFAR10, 'dir': 'CIFAR10', 'num_classes': 100,
-        'splits': ['train', 'train', 'test'], 'split_size': 0.8,
-        'mode': 'classification'
-    },
-    'dtd': {
-        'class': DTD, 'dir': 'dtd', 'num_classes': 47,
-        'splits': ['train', 'val', 'test'], 'split_size': 0.8,
-        'mode': 'classification'
-    },
-    'sun': {
-        'class': SUN397, 'dir': 'sun', 'num_classes': 397,
-        'splits': ['train', 'val', 'test'], 'split_size': 0.8,
-        'mode': 'classification'
-    },
-    'pets': {
-        'class': OxfordIIITPet, 'dir': 'pets', 'num_classes': 37,
-        'splits': ['train', 'train', 'test'], 'split_size': 0.8,
-        'mode': 'classification'
-    },
-    'rotation': {
-        'class': CIFAR10_rotation, 'dir': 'CIFAR10', 'num_classes': 25,
-        'splits': ['train', 'val', 'test'], 'split_size': 0.7,
-        'mode': 'classification'
-    },
-    'cub200': {
-        'class': ImageFolder, 'dir': 'CUB200', 'num_classes': 200,
-        'splits': ['train', 'train',  'test'], 'split_size': 0.8,
-        'mode': 'classification'
-    },
-    'cifar10': {
-        'class': datasets.CIFAR10, 'dir': 'CIFAR10', 'num_classes': 10,
-        'splits': ['train', 'train', 'test'], 'split_size': 0.7,
-        'mode': 'classification'
-    },
-    'cifar100': {
-        'class': ImageFolder, 'dir': 'CIFAR100', 'num_classes': 100,
-        'splits': ['train', 'train', 'test'], 'split_size': 0.7,
-        'mode': 'classification'
-    },
-    'flowers': {
-        'class': Flowers, 'dir': 'flowers', 'num_classes': 102,
-        'splits': ['train', 'valid', 'test'], 'split_size': 0.5,
-        'mode': 'classification'
-    }, 
-    'celeba': {
-        'class': CelebA, 'dir': 'CelebA', 'num_classes': 10,
-        'splits': ['train', 'valid', 'test'], 'split_size': 0.5,
-        'target_type': 'landmarks',
-        'mode': 'regression'
-    },
-    '300w': {
-        'class': FacesInTheWild300W, 'dir': '300W', 'num_classes': 136,
-        'splits': ['train', 'val', 'test'], 'split_size': 0.5,
-        'mode': 'regression'
-    },
-    'caltech101': {
-        'class': Caltech101, 'dir': 'caltech-101', 'num_classes': 102,
-        'splits': ['train', 'train', 'test'], 'split_size': 0.7,
-        'mode': 'classification'
-    },
-    'leeds_sports_pose': {
-        'class': LeedsSportsPose, 'dir': 'LeedsSportsPose', 'num_classes': 28,
-        'splits': ['train', 'train', 'test'], 'split_size': 0.8,
-        'mode': 'regression'
-    }
-}
-
-def huber_fn(y_true, y_pred):
-    error = y_true - y_pred
-    is_small_error = torch.abs(error) < 1
-    squared_loss = torch.square(error) / 2
-    linear_loss  = torch.abs(error) - 0.5
-    return torch.where(is_small_error, squared_loss, linear_loss)
-
-# Helper functions to load test datasets
-def get_dataset(args, c, d, s, t, shots):
-    print("LOADING DATASET", d)
-    if d == 'CelebA':
-        return c(os.path.join(args.data_root, d), split=s, target_type=dataset_info[args.test_dataset]['target_type'], transform=t, download=False, shots = shots)
-    elif d == 'CIFAR10' or d=='rotation':
-        return c(os.path.join(args.data_root, d), train=s == 'train', transform=t, download=True)
-    elif d == 'dtd' or d == 'pets':
-        return c(os.path.join(args.data_root, d), split=s, transform=t, download=True)
-    elif d=='sun':
-        return c(os.path.join(args.data_root, d), transform=t, download=True)
-    elif d == 'CUB200' or d == 'CIFAR100':
-        return c(os.path.join(args.data_root, d, s), transform=t)
-    else:
-        if 'split' in inspect.getfullargspec(c.__init__)[0]:
-            print("split in get_dataset", s)
-            if s == 'val':
-                try:
-                    return c(os.path.join(args.data_root, d),  split=s, transform=t, shots = shots)
-                except:
-                    return c(os.path.join(args.data_root, d), split='valid', transform=t, shots = shots)
-            else:
-                print("get_dataset", s)
-                return c(os.path.join(args.data_root, d), split=s, transform=t, shots = shots)
-        else:
-            return c(os.path.join(args.data_root, d), train=s == 'train', transform=t, shots = shots)
-
-
-def prepare_data(args, norm, shots=None):
-    transform = transforms.Compose([
-        transforms.Resize(args.image_size),
-        transforms.CenterCrop(args.image_size),
-        transforms.ToTensor(),
-        transforms.Normalize(*norm)
-    ])
-
-    if dataset_info[args.test_dataset]['splits'][1] == 'val':
-        train_dataset = get_dataset(args, dataset_info[args.test_dataset]['class'],
-                                    dataset_info[args.test_dataset]['dir'], 'train', transform, shots)
-        val_dataset = get_dataset(args, dataset_info[args.test_dataset]['class'],
-                                    dataset_info[args.test_dataset]['dir'], 'val', transform, shots)
-        trainval = ConcatDataset([train_dataset, val_dataset])
-
-    elif dataset_info[args.test_dataset]['splits'][1] == 'train':
-        trainval = get_dataset(args, dataset_info[args.test_dataset]['class'],
-                              dataset_info[args.test_dataset]['dir'], 'train', transform, shots)
-
-    test = get_dataset(args, dataset_info[args.test_dataset]['class'],
-                       dataset_info[args.test_dataset]['dir'], 'test', transform, shots)
-
-    return trainval, test
 
 torchvision_model_names = sorted(name for name in torchvision_models.__dict__
     if name.islower() and not name.startswith("__")
@@ -178,15 +36,20 @@ torchvision_model_names = sorted(name for name in torchvision_models.__dict__
 
 model_names = ['vit_small', 'vit_base', 'vit_conv_small', 'vit_conv_base'] + torchvision_model_names
 
-parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
+parser = argparse.ArgumentParser(description='Downstream training')
+
+# Basic Training arguments
 parser.add_argument('-data', metavar='DIR',
                     help='path to dataset')
+parser.add_argument('--results-dir', default='results/', type = str)
+parser.add_argument('--save_fc_model', action='store_true', help="If true, save the classifier state dict")
+
 parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet50',
                     choices=model_names,
                     help='model architecture: ' +
                         ' | '.join(model_names) +
                         ' (default: resnet50)')
-parser.add_argument('-j', '--workers', default=32, type=int, metavar='N',
+parser.add_argument('-j', '--workers', default=4, type=int, metavar='N',
                     help='number of data loading workers (default: 32)')
 parser.add_argument('--epochs', default=100, type=int, metavar='N',
                     help='number of total epochs to run')
@@ -201,15 +64,17 @@ parser.add_argument('--lr', '--learning-rate', default=0.1, type=float,
                     metavar='LR', help='initial (base) learning rate', dest='lr')
 parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
                     help='momentum')
-parser.add_argument('--wd', default=0.001, type=float,
+parser.add_argument('--wd', default=0.0, type=float,
                     metavar='W', help='weight decay (default: 0.)',
                     dest='weight_decay')
 parser.add_argument('-p', '--print-freq', default=10, type=int,
                     metavar='N', help='print frequency (default: 10)')
 parser.add_argument('--resume', default='', type=str, metavar='PATH',
                     help='path to latest checkpoint (default: none)')
-parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true',
-                    help='evaluate model on validation set')
+parser.add_argument('--image_size', default=224, type=int,
+                    help='image size')
+
+# DDP args
 parser.add_argument('--world-size', default=-1, type=int,
                     help='number of nodes for distributed training')
 parser.add_argument('--rank', default=-1, type=int,
@@ -228,24 +93,17 @@ parser.add_argument('--multiprocessing-distributed', action='store_true',
                          'fastest way to use PyTorch for either single node or '
                          'multi node data parallel training')
 
-parser.add_argument('--baseline', action='store_true', help="Use resnet or hyper-resnet")
+# args for Amortised Invariances
+parser.add_argument('--baseline', action='store_true', help="If true, loads the baseline model")
 parser.add_argument('--discretize', action='store_true', help="Discretize invariances before testing")
-parser.add_argument('--test_dataset', default='cifar10', type=str)
-parser.add_argument('--data_root', default='/raid/s2265822/TestDatasets/', type = str)
-parser.add_argument('--finetune', action='store_true',
-                    help='Finetune - only use to test baseline')
+
 # additional configs:
+parser.add_argument('--test_dataset', default='', type=str)
+parser.add_argument('--data_root', default='../TestDatasets/', type = str)
 parser.add_argument('--pretrained', default='', type=str,
                     help='path to moco pretrained checkpoint')
-parser.add_argument('--image_size', default=224, type=int,
-                    help='image size')
-
 parser.add_argument('--few_shot_reg', default=None, type=float,
-                    help='image size')
-parser.add_argument('--finetune_layer', default=-1, type=int, required=True, help = "4: layer 4, 3: layer 3, 2: layer 2, 1:layer 1, 0: conv1")
-
-
-best_acc1 = 0
+                    help='Performs feew shot regression with given split size')
 
 
 def main():
@@ -271,7 +129,6 @@ def main():
     args.distributed = args.world_size > 1 or args.multiprocessing_distributed
 
     ngpus_per_node = torch.cuda.device_count()
-    print(ngpus_per_node, args.distributed )
     if args.multiprocessing_distributed:
         # Since we have ngpus_per_node processes per node, the total world_size
         # needs to be adjusted accordingly
@@ -307,88 +164,17 @@ def main_worker(gpu, ngpus_per_node, args):
         dist.init_process_group(backend=args.dist_backend, init_method=args.dist_url,
                                 world_size=args.world_size, rank=args.rank)
         torch.distributed.barrier()
-    # create model
-    print("=> creating model '{}'".format(args.arch))
-    if args.arch.startswith('vit'):
-        if args.baseline:
-            model = vits.__dict__[args.arch](num_classes = dataset_info[args.test_dataset]['num_classes'])
-            linear_keyword = 'head'
-        else:
-            model = vits.PromptVisionTransformerMoCo(num_classes = dataset_info[args.test_dataset]['num_classes'])
-            linear_keyword = 'head'
-    else:
-        if args.baseline:
-            model = torchvision_models.__dict__[args.arch](num_classes = dataset_info[args.test_dataset]['num_classes'])
-            linear_keyword = 'fc'
-        else:
-            model = hyper_resnet.resnet50(num_classes  = dataset_info[args.test_dataset]['num_classes'])
-            linear_keyword = 'fc'
 
-    
-    # load from pre-trained, before DistributedDataParallel constructor
-    if args.pretrained:
-        if os.path.isfile(args.pretrained):
-            print("=> loading checkpoint '{}'".format(args.pretrained))
-            checkpoint = torch.load(args.pretrained, map_location="cpu")
-
-            # rename moco pre-trained keys
-            state_dict = checkpoint['state_dict']
-            print("####################### LAST EPOCH ######################", checkpoint['epoch'])
-            if args.baseline:
-                if args.arch == 'resnet50':
-                    base_str = 'encoder_q'
-                else:
-                    base_str = "base_encoder"
-                for k in list(state_dict.keys()):
-                    # retain only base_encoder up to before the embedding layer
-                    if k.startswith('module.%s' % base_str) and not k.startswith('module.%s.%s' % (base_str, linear_keyword)):
-                        # remove prefix
-                        state_dict[k[len('module.%s' % base_str):]] = state_dict[k]
-                    # delete renamed or unused k
-                    del state_dict[k]
-            else:
-                for k in list(state_dict.keys()):
-                    # retain only base_encoder up to before the embedding layer
-                    if k.startswith('module.base_encoder') and not k.startswith('module.base_encoder.%s' % linear_keyword):
-                        # remove prefix
-                        state_dict[k[len("module.base_encoder."):]] = state_dict[k]
-                    # delete renamed or unused k
-                    del state_dict[k]
-
-            # args.start_epoch = 0
-            print(state_dict.keys())
-            msg = model.load_state_dict(state_dict, strict=False)
-            print(msg.missing_keys)
-            # # if args.arch == 'vit_base':
-            # #     assert set(msg.missing_keys) == {"%s.weight" % linear_keyword, "%s.bias" % linear_keyword}
-
-            print("=> loaded pre-trained model '{}'".format(args.pretrained))
-        else:
-            print("=> no checkpoint found at '{}'".format(args.pretrained))
-
+    model, linear_keyword = load_backbone(args)
     model.train()
+
     # freeze all layers but the last fc
-    if not args.finetune:
-            for name, param in model.named_parameters():
-                if name not in ['%s.weight' % linear_keyword, '%s.bias' % linear_keyword] and 'bn' not in name:
-                    param.requires_grad = False
-                print(name, param.requires_grad)
-    else:
-        # make trainable layer-wise for different experiments
-        for name, param in model.named_parameters():
-            if name.startswith('layer'):
-                layer_num = name.split(".")[0].split("layer")[-1]
-                if int(layer_num) >= args.finetune_layer:
-                     param.requires_grad = True
-                else:
-                    param.requires_grad = False
-            elif name in ['conv1.weight', 'bn1.weight', 'bn1.bias']:
-                if args.finetune_layer == 0 :
-                    param.requires_grad = True
-                else:
-                    param.requires_grad = False
-            print(name, param.requires_grad)
-    # infer learning rate before changing batch size, not done in hyper-models
+    for name, param in model.named_parameters():
+        if name not in ['%s.weight' % linear_keyword, '%s.bias' % linear_keyword]:
+            param.requires_grad = False
+        print(name, param.requires_grad)
+
+    # infer learning rate before changing batch size, not done for hyper-models
     init_lr = args.lr 
 
     if not torch.cuda.is_available():
@@ -428,7 +214,6 @@ def main_worker(gpu, ngpus_per_node, args):
     getattr(model, linear_keyword).bias.data.zero_()
     print(model)
 
-    # print(model)
     # define loss function (criterion) and optimizer
     # Loss function used for classification is CE and for rgeression we use L1Loss
     if dataset_info[args.test_dataset]['mode'] == 'classification':
@@ -440,15 +225,15 @@ def main_worker(gpu, ngpus_per_node, args):
     if args.baseline:
         parameters = list(filter(lambda p: p.requires_grad, model.parameters()))
         learn_inv= None
-        optimizer = torch.optim.SGD(parameters, args.lr,
-                                 momentum=args.momentum,
+        optimizer = torch.optim.Adam(parameters, args.lr,
+                                #  momentum=args.momentum,
                                 weight_decay = 0.)
     else:
         learn_inv = Variable(torch.tensor([0.5, 0.5])).cuda()
         learn_inv.requires_grad_()
         parameters = list(filter(lambda p: p.requires_grad, model.parameters()))
-        optimizer_model = torch.optim.SGD(parameters, lr=init_lr, weight_decay = args.weight_decay)
-        optimizer_inv = torch.optim.Adam([learn_inv], lr = 0.1)
+        optimizer_model = torch.optim.SGD(parameters, lr=init_lr, weight_decay = args.weight_decay, momentum=0.9)
+        optimizer_inv = torch.optim.SGD([learn_inv], lr = 0.1)
         optimizer = [optimizer_model, optimizer_inv]
 
     # optionally resume from a checkpoint
@@ -476,7 +261,7 @@ def main_worker(gpu, ngpus_per_node, args):
     cudnn.benchmark = True
 
     # Data loading code
-    if args.test_dataset == 'imagenet':
+    if args.test_dataset == 'imagenet': # imagenet
         traindir = os.path.join(args.data, 'train')
         valdir = os.path.join(args.data, 'val')
         normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
@@ -508,7 +293,7 @@ def main_worker(gpu, ngpus_per_node, args):
             ])),
             batch_size=256, shuffle=False,
             num_workers=args.workers, pin_memory=True)
-    else:
+    else: 
         imagenet_mean_std = [[0.485, 0.456, 0.406], [0.229, 0.224, 0.225]]
         train_dataset, test_dataset = prepare_data(args, norm=imagenet_mean_std, shots = args.few_shot_reg)
         if args.distributed:
@@ -518,30 +303,19 @@ def main_worker(gpu, ngpus_per_node, args):
         train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size,  shuffle=(train_sampler is None),
                                                     num_workers=args.workers, pin_memory=True, sampler=train_sampler)
         val_loader = torch.utils.data.DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=0)
-        print("LENGTH OF DATASETS", len(train_dataset), len(test_dataset))
+        print("Size of train and test datasets", len(train_dataset), len(test_dataset))
  
-    if args.evaluate:
-        validate(val_loader, model, criterion, args)
-        return
 
-    if args.baseline:
-        if not args.finetune:
-            fname = args.test_dataset + "_" + args.arch + "_" + "baseline.json"
-        else:
-            args.exp_name = "finetune_layer_" + str(args.finetune_layer)
-            fname = args.exp_name + "_" + args.test_dataset + "_" + args.arch + "_" + "baseline.json"
-    else:
-        fname = args.test_dataset + "_" + args.arch + "_hyper.json"
-        
-    log_json = open(os.path.join("results/", fname), "w")
+    # If args.results does not exist
+    if not os.path.exists(args.results_dir):
+        os.mkdir(args.results_dir)
 
-    results_dict = []
-    save_dict = {}
+    results_file = open(os.path.join(args.results_dir, args.test_dataset + "_" + args.arch + "_hyper.json"), "w")
+    results_dict = {}
+    best_results = {}
+    best_acc1 = 0.0
+
     for epoch in range(args.start_epoch, args.epochs):
-        start = torch.cuda.Event(enable_timing=True)
-        end = torch.cuda.Event(enable_timing=True)
-
-        start.record()
         epoch_results = {}
         if args.distributed:
             train_sampler.set_epoch(epoch)
@@ -552,287 +326,51 @@ def main_worker(gpu, ngpus_per_node, args):
             adjust_learning_rate(optimizer[1], init_lr, epoch, args)
 
         # train for one epoch
-        batch_accurcy_list, hinge_loss_avg = train(train_loader, model, criterion, optimizer, epoch, args, learn_inv)
-        end.record()
-        # Waits for everything to finish running
-        torch.cuda.synchronize()
-        time = start.elapsed_time(end)
-        print("Time for training", start.elapsed_time(end))
+        train_acc1, _ = train(train_loader, model, criterion, optimizer, epoch, args, learn_inv)
 
         # evaluate on validation set
         if args.discretize:
             discretized_inv = torch.tensor([0.0, 0.0]).to(args.gpu)
-            # print(learn_inv)
             if learn_inv[0] >=0.5:
                 discretized_inv[0] = 1.0
             if learn_inv[1] >=0.5:
                 discretized_inv[1] = 1.0
             
-            acc1, val_accuracy_list = validate(val_loader, model, criterion, args, discretized_inv)
+            val_acc1, _ = validate(val_loader, model, criterion, args, discretized_inv)
         else:
-            acc1, val_accuracy_list = validate(val_loader, model, criterion, args, learn_inv)
+            val_acc1, _ = validate(val_loader, model, criterion, args, learn_inv)
+        
+        if val_acc1 > best_acc1:
+            best_results['Epoch'] = epoch
+            best_results['training accuracy'] = train_acc1
+            best_results["val accuracy"] = val_acc1
+            best_results['Invariances'] = learn_inv.cpu().detach().numpy().tolist()
+            best_acc1 = val_acc1
+            is_best = True
+        else:
+            is_best = False
+
         if not args.baseline:
             print("Invariance hyper-parameters", learn_inv)
-        # remember best acc@1 and save checkpoint
-        # is_best = acc1 > best_acc1
-        # best_acc1 = max(acc1, best_acc1)
+            epoch_results['Invariances'] = learn_inv.cpu().detach().numpy().tolist()
     
         epoch_results['Epoch'] = epoch
-        epoch_results['training hinge loss'] = hinge_loss_avg
-        epoch_results['training accuracy'] = batch_accurcy_list
-        epoch_results["val avg accuracy"] = acc1
-        epoch_results['validation accuracy'] = val_accuracy_list
-        epoch_results["time"] = time
+        epoch_results['training accuracy'] = train_acc1
+        epoch_results["val accuracy"] = val_acc1
+        results_dict[epoch] = epoch_results
     
-        save_dict[str(epoch)] = epoch_results
-    print(save_dict)
-    json.dump(save_dict, log_json)
+    # Saves results in args.results
+    results_dict['best'] = best_results
+    json.dump(results_dict, results_file)
 
-def train(train_loader, model, criterion, optimizer, epoch, args, learn_inv):
-    batch_time = AverageMeter('Time', ':6.3f')
-    data_time = AverageMeter('Data', ':6.3f')
-    losses = AverageMeter('Loss', ':.4e')
-    top1 = AverageMeter('Acc@1', ':6.2f')
-    top5 = AverageMeter('Acc@5', ':6.2f')
-    avg_acc = 0.0
-    progress = ProgressMeter(
-        len(train_loader),
-        [batch_time, data_time, losses, top1, top5],
-        prefix="Epoch: [{}]".format(epoch))
-
-    """
-    Switch to eval mode:
-    Under the protocol of linear classification on frozen features/models,
-    it is not legitimate to change any part of the pre-trained model.
-    BatchNorm in train mode may revise running mean/std (even if it receives
-    no gradient), which are part of the model parameters too.
-    """
-    model.eval()
-
-    end = time.time()
-    batch_accurcy_list = []
-
-    hinge_loss = nn.MultiMarginLoss()
-    hinge_loss_avg = 0.0
-    for i, (images, target) in enumerate(train_loader):
-        # measure data loading time
-        data_time.update(time.time() - end)
-
-        if args.gpu is not None:
-            images = images.cuda(args.gpu, non_blocking=True)
-        if torch.cuda.is_available():
-            target = target.cuda(args.gpu, non_blocking=True)
-        # print(learn_inv)
-
-        # compute output
-        if args.baseline:
-            output = model(images)
-        else:
-
-            output = model(images, learn_inv) 
-            
-        # Normalize outputs or targets for regression datasets for better comparison
-        if args.test_dataset == 'leeds_sports_pose':
-            output = nn.functional.normalize(output, dim=1)
-            target = nn.functional.normalize(target, dim=1)
-        if args.test_dataset == 'celeba':
-            target = nn.functional.normalize(target, dim=1)
-        loss = criterion(output, target) 
-
-        # measure accuracy and record loss
-        if dataset_info[args.test_dataset]['mode'] == 'classification':
-            acc1, acc5 = accuracy(output, target, topk=(1, 5))
-        else:
-            acc1 = [r2_score(target.flatten().detach().cpu().numpy(), output.flatten().detach().cpu().numpy())]
-            acc5 = [criterion(output, target).item()]
-
-        avg_acc += acc1[0]
-        losses.update(loss.item(), images.size(0))
-        top1.update(acc1[0], images.size(0))
-        top5.update(acc5[0], images.size(0))
-       
-        batch_accurcy_list.append(acc1[0].item())
-
-        # compute gradient and do SGD step
-        if args.baseline:
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-        else:
-            optimizer[0].zero_grad() # Update model parameters
-            optimizer[1].zero_grad() # Update invariances
-            loss.backward()
-            optimizer[0].step()
-            optimizer[1].step()
-            learn_inv.data.clamp_(0.0, 1.0) # Clamp invariances between 0 and 1
-
-        if dataset_info[args.test_dataset]['mode'] == 'classification':
-            hinge_loss_avg += hinge_loss(output, target).item()
-        else:
-            hinge_loss_avg += nn.functional.l1_loss(output, target).item()
-        # measure elapsed time
-        batch_time.update(time.time() - end)
-        end = time.time()
-
-        if i % args.print_freq == 0:
-            progress.display(i)
-
-
-    return batch_accurcy_list, hinge_loss_avg/(i+1)
-
-def validate(val_loader, model, criterion, args, learn_inv):
-    batch_time = AverageMeter('Time', ':6.3f')
-    losses = AverageMeter('Loss', ':.4e')
-    top1 = AverageMeter('Acc@1', ':6.2f')
-    top5 = AverageMeter('Acc@5', ':6.2f')
-    progress = ProgressMeter(
-        len(val_loader),
-        [batch_time, losses, top1, top5],
-        prefix='Test: ')
-
-    # switch to evaluate mode
-    model.eval()
-    avg_acc = 0.0
-    batch_accurcy_list = []
-    with torch.no_grad():
-        end = time.time()
-        for i, (images, target) in enumerate(val_loader):
-            if args.gpu is not None:
-                images = images.cuda(args.gpu, non_blocking=True)
-            if torch.cuda.is_available():
-                target = target.cuda(args.gpu, non_blocking=True)
-
-            # compute output
-            if args.baseline:
-                output = model(images)
-            else:
-                output = model(images, learn_inv) # mode='downstream')
-            if args.test_dataset == 'leeds_sports_pose':
-                output = nn.functional.normalize(output, dim=1)
-                target = nn.functional.normalize(target, dim=1)
-            if args.test_dataset == 'celeba':
-                target = nn.functional.normalize(target, dim=1)
-            loss = criterion(output, target)
-
-            # measure accuracy and record loss
-            if dataset_info[args.test_dataset]['mode'] == 'classification':
-                acc1, acc5 = accuracy(output, target, topk=(1, 5))
-            else:
-                acc1 = [r2_score(target.flatten().detach().cpu().numpy(), output.flatten().detach().cpu().numpy())]
-                acc5 = [criterion(output, target).item()]
-
-            losses.update(loss.item(), images.size(0))
-            top1.update(acc1[0], images.size(0))
-            top5.update(acc5[0], images.size(0))
-            avg_acc += acc1[0]
-
-            batch_accurcy_list.append(acc1[0].item())
-            # measure elapsed time
-            batch_time.update(time.time() - end)
-            end = time.time()
-
-            if i % args.print_freq == 0:
-                progress.display(i)
-
-        # TODO: this should also be done with the ProgressMeter
-        print(' * Acc@1 {top1.avg:.3f} Acc@5 {top5.avg:.3f}'
-              .format(top1=top1, top5=top5))
-    return top1.avg.item(), batch_accurcy_list
-
-
-def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
-    torch.save(state, filename)
-    if is_best:
-        shutil.copyfile(filename, 'model_best.pth.tar')
-
-
-def sanity_check(state_dict, pretrained_weights, linear_keyword):
-    """
-    Linear classifier should not change any weights other than the linear layer.
-    This sanity check asserts nothing wrong happens (e.g., BN stats updated).
-    """
-    print("=> loading '{}' for sanity check".format(pretrained_weights))
-    checkpoint = torch.load(pretrained_weights, map_location="cpu")
-    state_dict_pre = checkpoint['state_dict']
-
-    for k in list(state_dict.keys()):
-        # only ignore linear layer
-        if '%s.weight' % linear_keyword in k or '%s.bias' % linear_keyword in k:
-            continue
-
-        # name in pretrained model
-        k_pre = 'base_encoder.' + k[len('module.'):] \
-            if k.startswith('module.') else 'base_encoder.' + k
-
-        assert ((state_dict[k].cpu() == state_dict_pre[k_pre]).all()), \
-            '{} is changed in linear classifier training.'.format(k)
-
-    print("=> sanity check passed.")
-
-
-class AverageMeter(object):
-    """Computes and stores the average and current value"""
-    def __init__(self, name, fmt=':f'):
-        self.name = name
-        self.fmt = fmt
-        self.reset()
-
-    def reset(self):
-        self.val = 0
-        self.avg = 0
-        self.sum = 0
-        self.count = 0
-
-    def update(self, val, n=1):
-        self.val = val
-        self.sum += val * n
-        self.count += n
-        self.avg = self.sum / self.count
-
-    def __str__(self):
-        fmtstr = '{name} {val' + self.fmt + '} ({avg' + self.fmt + '})'
-        return fmtstr.format(**self.__dict__)
-
-
-class ProgressMeter(object):
-    def __init__(self, num_batches, meters, prefix=""):
-        self.batch_fmtstr = self._get_batch_fmtstr(num_batches)
-        self.meters = meters
-        self.prefix = prefix
-
-    def display(self, batch):
-        entries = [self.prefix + self.batch_fmtstr.format(batch)]
-        entries += [str(meter) for meter in self.meters]
-        print('\t'.join(entries))
-
-    def _get_batch_fmtstr(self, num_batches):
-        num_digits = len(str(num_batches // 1))
-        fmt = '{:' + str(num_digits) + 'd}'
-        return '[' + fmt + '/' + fmt.format(num_batches) + ']'
-
-
-def adjust_learning_rate(optimizer, init_lr, epoch, args):
-    """Decay the learning rate based on schedule"""
-    cur_lr = init_lr * 0.5 * (1. + math.cos(math.pi * epoch / args.epochs))
-    for param_group in optimizer.param_groups:
-        param_group['lr'] = cur_lr
-
-
-def accuracy(output, target, topk=(1,)):
-    """Computes the accuracy over the k top predictions for the specified values of k"""
-    with torch.no_grad():
-        maxk = max(topk)
-        batch_size = target.size(0)
-
-        _, pred = output.topk(maxk, 1, True, True)
-        pred = pred.t()
-        correct = pred.eq(target.view(1, -1).expand_as(pred))
-
-        res = []
-        for k in topk:
-            correct_k = correct[:k].reshape(-1).float().sum(0, keepdim=True)
-            res.append(correct_k.mul_(100.0 / batch_size))
-        return res
+    # Save checkpoint
+    if args.save_fc_model:
+        save_checkpoint({
+                    'epoch': args.epochs,
+                    'arch': args.arch,
+                    'state_dict': model.fc.state_dict(),
+                    'best_acc1': best_acc1,
+                }, is_best)
 
 
 if __name__ == '__main__':

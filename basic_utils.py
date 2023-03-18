@@ -2,17 +2,10 @@ import itertools
 import torch
 import os
 
-def get_invariances(k_augs, baseline, auto_augment):
+def get_invariances(k_augs, baseline):
     if baseline:
         invariances = None
-    elif auto_augment:
-        inv_list = [list(i) for i in itertools.product([0.0, 1.0], repeat=14)]
-        new_list = []
-        for i in inv_list:
-            if sum(i) == 2.0:
-                new_list.append(i)
-        invariances = [torch.tensor(new_list[k]) for k in range(0, len(new_list))]
-    elif k_augs:
+    elif k_augs == 5:
         inv_list = [list(i) for i in itertools.product([0.0, 1.0], repeat=5)]
         new_list = []
         for i in inv_list:
@@ -20,28 +13,18 @@ def get_invariances(k_augs, baseline, auto_augment):
                 new_list.append(i)
 
         invariances = [torch.tensor(new_list[k]) for k in range(0, len(new_list))]
-    else:
+    elif k_augs == 2:
         invariances = [torch.tensor([0.0, 1.0]), torch.tensor([1.0, 0.0]), torch.tensor([1.0, 1.0])]
     return invariances
 
 def get_file_name(args):
-
     if args.baseline:
-        if args.simclr_train:
-            fname = "imagenet-simclr_" + args.arch+"_"+args.base_augs+'_checkpoint_%04d.pth.tar'
-        else:
-            fname = "imagenet-moco_" + args.arch+"_"+args.base_augs+'_checkpoint_%04d.pth.tar'
+        fname = "imagenet-moco_" + args.arch+"_"+args.base_augs+'_checkpoint_%04d.pth.tar'
     else:
-        if args.simclr_train:
-            if args.k_augs:
-                fname = "imagenet-simclr_k_aug_" + args.arch+'_hyper_checkpoint_%04d.pth.tar'
-            else:
-                fname = "imagenet-simclr_" + args.arch+'_hyper_checkpoint_%04d.pth.tar'
-        else:
-            if args.k_augs:
-                fname = "imagenet-moco_k_aug_" + args.arch+'_hyper_checkpoint_%04d.pth.tar'
-            else:
-                fname = "imagenet-moco_" + args.arch+'_hyper_checkpoint_%04d.pth.tar'
+        if args.arch == 'resnet50':
+            fname = "hyper_{}_imagenet100-moco_{}".format(args.arch, args.k_augs) + '_checkpoint_%04d.pth.tar'
+        elif args.arch == 'vit_base':
+            fname = "prompt_{}_imagenet1k-moco_{}".format(args.arch, args.k_augs) + '_checkpoint_%04d.pth.tar'
     return fname
 
 def check_expt_configs(args):

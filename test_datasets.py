@@ -21,9 +21,7 @@ import torchvision.transforms.functional as FT
 from typing import Any, Callable, List, Optional, Union, Tuple
 from torchvision.datasets.vision import VisionDataset
 from torchvision.datasets.utils import download_file_from_google_drive, check_integrity, verify_str_arg
-from torchvision.datasets.folder import pil_loader, accimage_loader, default_loader
-from torchvision.datasets import ImageFolder
-
+from torchvision.datasets.folder import default_loader
 
 
 imagenet_mean_std = [[0.485, 0.456, 0.406], [0.229, 0.224, 0.225]]
@@ -56,104 +54,8 @@ def make_dataset(root, split):
     return image_ids, labels, classes, class_to_idx
 
 
-class rotation():
-        def __init__(self, theta, rot_classes):
-                self.theta = theta
-                self.rot_classes = rot_classes
-                self.rotations = np.linspace(start = -theta, stop = theta, num = rot_classes)
-                print(self.rotations)
-        def transform_image_rotation(self, image):
-                index = np.random.randint(self.rot_classes)
-                angle = self.rotations[index]
-                img = torchvision.transforms.functional.rotate(image, angle)
-                return img, index #angle*(np.pi/180.0)
-
-        def transform_image_prediction(self, image):
-                angle = np.random.uniform(low = -self.theta, high = self.theta, size = (1))
-                img = torchvision.transforms.functional.rotate(image, angle[0])
-                return img
-
-class CIFAR10_rotation(torchvision.datasets.CIFAR10):
-    def __init__(self, root, train=True, transform=None,download=True):
-        self.means = imagenet_mean_std[0]
-        self.stds = imagenet_mean_std[1]
-        self.train = train
-        if transform is None:
-            normalize = transforms.Normalize(self.means, self.stds)
-            transform = transforms.Compose([transforms.ToTensor(),normalize,])# AddGaussianNoise(0., 0.1)])
-        super().__init__(root, train = self.train, download = True)
-        self.transform = transform
-        self.images = self.data
-        self.labels = self.targets
-        self.num_samples = len(self.labels)
-        self.rotation = rotation(270.0, 25)
-
-    def __getitem__(self, index):
-        image, label = self.images[index], self.labels[index]
-        image = Image.fromarray(image)
-        rot_image, rot_label = self.rotation.transform_image_rotation(image)
-        if self.transform is not None:
-            rot_image = self.transform(rot_image)
-            image = self.transform(image)
-
-        return  rot_image, rot_label
-
-    def __repr__(self):
-        rep = "Dataset ROTMNIST \n"
-        rep += "Number of datapoints: %s \n" % str(self.num_samples)
-        rep += "Split %s \n" % str("Train" if self.train else "Test")
-        return  rep
-
-    def __len__(self):
-        return len(self.images)
-
-class Flowers(Dataset):
-    """`Oxfod-VGG Flowers <https://www.robots.ox.ac.uk/~vgg/data/flowers/>`_ Dataset.
-    Args:
-        root (string): Root directory path to dataset.
-        split (string): dataset split to load. E.g. ``train``
-        transform (callable, optional): A function/transform that takes in a PIL image
-            and returns a transformed version. E.g. ``transforms.RandomCrop``
-        target_transform (callable, optional): A function/transform that takes in the
-            target and transforms it.
-        loader (callable, optional): A function to load an image given its path.
-        download (bool, optional): If true, downloads the dataset from the internet and
-            puts it in the root directory. If dataset is already downloaded, it is not
-            downloaded again.
-    """
-    def __init__(self, root, split, transform=None, target_transform=None, download=None, loader=default_loader, shots = None):
-        self.root = root
-        self.split = split
-        self.transform = transform
-        self.target_transform = target_transform
-        self.loader = loader
-        image_ids, labels, classes, class_to_idx = make_dataset(root, split)
-        self.samples = list(zip(image_ids, labels))
-
-    def __getitem__(self, index):
-        """
-        Args:
-            index (int): Index
-        Returns:
-            tuple: (sample, target) where target is class_index of the target class.
-        """
-
-        path, target = self.samples[index]
-        #print("TARGET IN DATASET", target)
-        sample = self.loader(path)
-        if self.transform is not None:
-            sample = self.transform(sample)
-        if self.target_transform is not None:
-            target = self.target_transform(target)
-
-        return sample, target
-
-    def __len__(self):
-        return len(self.samples)
-
-
 class FacesInTheWild300W(Dataset):
-    def __init__(self, root, split, mode='indoor', transform=None, loader=default_loader, download=False, shots = None):
+    def __init__(self, root, split, mode='indoor+outdoor', transform=None, loader=default_loader, download=False, shots = None):
         self.root = root
         self.split = split
         self.mode = mode
@@ -176,13 +78,11 @@ class FacesInTheWild300W(Dataset):
         #while not os.path.exists(split_path):
         self.generate_dataset_splits(len(images), shots=shots)
         split_idxs = np.load(split_path)
-        print(split, split_path, max(split_idxs), len(images), len(keypoints))
         self.images = [images[i] for i in split_idxs]
         self.keypoints = [keypoints[i] for i in split_idxs]
 
     def generate_dataset_splits(self, l, split_sizes=[0.3, 0.3, 0.4], shots = None):
         np.random.seed(0)
-        print(split_sizes)
         assert sum(split_sizes) == 1
         idxs = np.arange(l)
         np.random.shuffle(idxs)
@@ -199,12 +99,9 @@ class FacesInTheWild300W(Dataset):
             valid_idx = idxs[shot_split//2:shot_split]
             test_idx = idxs[shot_split:]
         #print(max(train_idx), max(valid_idx), max(test_idx))
-        print("Generated train")
         np.save(os.path.join(self.root, f'{self.mode}_train'), train_idx)
         np.save(os.path.join(self.root, f'{self.mode}_valid'), valid_idx)
-        print("Generated train and val")
         np.save(os.path.join(self.root, f'{self.mode}_test'), test_idx)
-        print("Generated test")
 
     def __getitem__(self, index):
         # get image in original resolution
@@ -460,77 +357,6 @@ class CelebA(VisionDataset):
         return '\n'.join(lines).format(**self.__dict__)
 
 
-
-def create_caltech101_splits(root, num_train_per_class=30):
-    dataset = ImageFolder(os.path.join(root, 'caltech-101', '101_ObjectCategories'), transform=None)
-
-    np.random.seed(0)
-
-    image_ids = ['/'.join(image_id.split('/')[-2:]) for image_id, label in dataset.imgs]
-    labels = [label for image, label in dataset.imgs]
-    data = dict(zip(image_ids, labels))
-    class_idxs = {label: [] for label in range(len(dataset.classes))}
-    for i, label in enumerate(labels):
-        class_idxs[label].append(i)
-
-    train_idxs = []
-    for i in class_idxs:
-        a = list(np.sort(np.random.choice(class_idxs[i], num_train_per_class)))
-        train_idxs.extend(a)
-    print(len(train_idxs))
-
-    test_idxs = set(range(len(labels))) - set(train_idxs)
-    print(len(test_idxs))
-
-    with open( os.path.join(root, 'caltech-101', 'train.txt'), 'w') as f:
-        for i in train_idxs:
-            image_id, label = image_ids[i], labels[i]
-            f.write("%s %s\n" % (image_id, label))
-
-    with open(os.path.join(root, 'caltech-101', 'test.txt'), 'w') as f:
-        for i in test_idxs:
-            image_id, label = image_ids[i], labels[i]
-            f.write("%s %s\n" % (image_id, label))
-
-
-class Caltech101(Dataset):
-    def __init__(self, root, split, transform=None, target_transform=None, download=True, loader=default_loader, shots =  None):
-        self.transform = transform
-        self.target_transform = target_transform
-        self.loader = loader
-        self.root = root
-        # remove clutter class directory
-        #clutter_dir = os.path.join(root, 'caltech101', '101_ObjectCategories', 'BACKGROUND_Google')
-        #if os.path.exists(clutter_dir):
-        #    shutil.rmtree(clutter_dir, ignore_errors=True)
-        # find indices for split
-        with open(os.path.join(root, f'{split}.txt'), 'r') as f:
-            self.samples = [(os.path.join('/raid/s2265822/TestDatasets/', 'caltech-101', '101_ObjectCategories', line.split(' ')[0]), int(line.split(' ')[1]))
-                            for line in f.read().splitlines()]
-
-    def __getitem__(self, index):
-        """
-        Args:
-            index (int): Index
-        Returns:
-            tuple: (sample, target) where target is class_index of the target class.
-        """
-
-        path, target = self.samples[index]
-        sample = self.loader(path)
-        if self.transform is not None:
-            sample = self.transform(sample)
-        if self.target_transform is not None:
-            target = self.target_transform(target)
-
-        return sample, target
-
-    def __len__(self):
-        return len(self.samples)
-
-
-# create_caltech101_splits(root = '/raid/s2265822/test_datasets/')
-
 class LeedsSportsPose(Dataset):
     def __init__(self, root, split, transform=None, loader=default_loader, download=False, shots = None):
         self.root = root
@@ -554,13 +380,11 @@ class LeedsSportsPose(Dataset):
         assert sum(split_sizes) == 1
         idxs = np.arange(l)
         np.random.shuffle(idxs)
-        print("shots", shots)
         if shots is None:
             split1 = int(l * split_sizes[0])
             train_idx = idxs[:split1]
             test_idx = idxs[split1:]
         else:
-            print("shots", shots)
             split1 = int(l * shots)
             train_idx = idxs[:split1]
             test_idx = idxs[split1:]

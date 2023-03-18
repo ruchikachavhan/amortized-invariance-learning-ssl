@@ -2,3 +2,17 @@ runs/
 *.jpg
 *.png
 results/
+wandb/
+*.ipynb_checkpoints
+*.pyc
+*.json
+*.csv
+*.txt
+*.zip
+*.tar.gz
+*.tar.bz2
+*.pth
+*.pkl
+*.pt
+*.pth.tar
+r2score.py
