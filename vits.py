@@ -37,7 +37,7 @@ def load_vit(path):
     return state_dict
     
 class PromptVisionTransformerMoCo(VisionTransformer):
-    def __init__(self, baseline_path='/raid/s2265822/hyper-contrastive-learning/vit-b-300ep.pth.tar', inv_dim = 2, num_inv_fc = 128, stop_grad_conv1=False, **kwargs):
+    def __init__(self, baseline_path='vit-b-300ep.pth.tar', inv_dim = 2, num_inv_fc = 256, stop_grad_conv1=False, **kwargs):
         super().__init__(**kwargs)
         
         # Load MoCo pretrained model
