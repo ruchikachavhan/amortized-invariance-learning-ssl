@@ -61,9 +61,9 @@ We implemented Amortised ViTs using prompting. First, download the moco-v3 model
 
 We evaluate on several downstream datasets including [CIFAR10](https://pytorch.org/vision/stable/datasets.html), [CIFAR100](https://pytorch.org/vision/stable/datasets.html), [Caltech101](http://www.vision.caltech.edu/Image_Datasets/Caltech101/), [DTD](https://www.robots.ox.ac.uk/~vgg/data/dtd/), [Oxford-Flowers](https://www.robots.ox.ac.uk/~vgg/data/flowers/102/index.html), [Oxford-Pets](https://www.robots.ox.ac.uk/~vgg/data/pets/), [300w](https://ibug.doc.ic.ac.uk/resources/300-W/), [Leeds Sports Pose](https://dbcollection.readthedocs.io/en/latest/datasets/leeds_sports_pose_extended.html), and [CelebA](https://mmlab.ie.cuhk.edu.hk/projects/CelebA.html). We download these datasets in ```../TestDatasets/```. Training and test splits have been adopted from the [Transfer Learning Library](https://github.com/thuml/Transfer-Learning-Library/tree/master)
 
-To run downstream experiments, for example on CIFAR10, run 
+To run downstream experiments, for example on CIFAR10 on GPU 0, run 
 ```
-python main_lincls.py --test_dataset cifar10 --pretrained saved_models/<name of checkpoint> 
+python main_lincls.py --test_dataset cifar10 --gpu 0 --pretrained saved_models/<name of checkpoint> 
 ```
 Results will be stored in ```results/```
 
