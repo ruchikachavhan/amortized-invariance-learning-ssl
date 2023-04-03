@@ -63,11 +63,11 @@ We evaluate on several downstream datasets including [CIFAR10](https://pytorch.o
 
 To run downstream experiments for amortised models, for example on CIFAR10 on GPU 0, run 
 ```
-python main_lincls.py --test_dataset cifar10 --gpu 0 --pretrained saved_models/<name of checkpoint> 
+python main_lincls.py -a <arch> --test_dataset cifar10 --gpu 0 --pretrained saved_models/<name of checkpoint> 
 ```
 To run baseline models, run
 ```
-python main_lincls.py --test_dataset cifar10 --gpu 0 --baseline --pretrained saved_models/<name of baseline checkpoint> 
+python main_lincls.py -a <arch> --test_dataset cifar10 --gpu 0 --baseline --pretrained saved_models/<name of baseline checkpoint> 
 ```
 Results will be stored in ```results/```
 
