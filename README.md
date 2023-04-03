@@ -52,18 +52,22 @@ Models will be stored in ```saved_models/```
 
 ### ViT (base)
 
-We implemented Amortised ViTs using prompting. First, download the moco-v3 model for initialisation of Prompt-ViT from [this link](https://dl.fbaipublicfiles.com/moco-v3/vit-b-300ep/vit-b-300ep.pth.tar) . To pre-train the Prompt-ViT on ImageNet with 8-GPUs:
+We implemented Amortised ViTs using invariances as prompt tokens. First, download the moco-v3 model for initialisation of Prompt-ViT from [this link](https://dl.fbaipublicfiles.com/moco-v3/vit-b-300ep/vit-b-300ep.pth.tar) . To pre-train the Prompt-ViT on ImageNet with 8-GPUs:
 ```
  python main_moco.py -a vit_base --lr 1.5e-4 --weight-decay 0.1 --stop-grad-conv1 --moco-t 0.2 --moco-m-cos --moco-mlp-dim 4096 --moco-dim 256  --batch-size 1024  --warmup-epochs=40 --epochs 300 --dist-url 'tcp://localhost:8008' --multiprocessing-distributed --world-size 1 --rank 0 --data ../../imagenet1k
 ```
-
+Download pretrained models from [here](). 
 ## Downstream training
 
 We evaluate on several downstream datasets including [CIFAR10](https://pytorch.org/vision/stable/datasets.html), [CIFAR100](https://pytorch.org/vision/stable/datasets.html), [Caltech101](http://www.vision.caltech.edu/Image_Datasets/Caltech101/), [DTD](https://www.robots.ox.ac.uk/~vgg/data/dtd/), [Oxford-Flowers](https://www.robots.ox.ac.uk/~vgg/data/flowers/102/index.html), [Oxford-Pets](https://www.robots.ox.ac.uk/~vgg/data/pets/), [300w](https://ibug.doc.ic.ac.uk/resources/300-W/), [Leeds Sports Pose](https://dbcollection.readthedocs.io/en/latest/datasets/leeds_sports_pose_extended.html), and [CelebA](https://mmlab.ie.cuhk.edu.hk/projects/CelebA.html). We download these datasets in ```../TestDatasets/```. Training and test splits have been adopted from the [Transfer Learning Library](https://github.com/thuml/Transfer-Learning-Library/tree/master)
 
-To run downstream experiments, for example on CIFAR10 on GPU 0, run 
+To run downstream experiments for amortised models, for example on CIFAR10 on GPU 0, run 
 ```
 python main_lincls.py --test_dataset cifar10 --gpu 0 --pretrained saved_models/<name of checkpoint> 
+```
+To run baseline models, run
+```
+python main_lincls.py --test_dataset cifar10 --gpu 0 --baseline --pretrained saved_models/<name of baseline checkpoint> 
 ```
 Results will be stored in ```results/```
 
