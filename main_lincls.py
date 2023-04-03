@@ -317,11 +317,11 @@ def main_worker(gpu, ngpus_per_node, args):
         epoch_results = {}
         if args.distributed:
             train_sampler.set_epoch(epoch)
-        if args.baseline:
-            adjust_learning_rate(optimizer, init_lr, epoch, args)
-        else:
-            adjust_learning_rate(optimizer[0], init_lr, epoch, args)
-            adjust_learning_rate(optimizer[1], init_lr, epoch, args)
+#         if args.baseline:
+#             adjust_learning_rate(optimizer, init_lr, epoch, args)
+#         else:
+#             adjust_learning_rate(optimizer[0], init_lr, epoch, args)
+#             adjust_learning_rate(optimizer[1], init_lr, epoch, args)
 
         # train for one epoch
         train_acc1, _ = train(train_loader, model, criterion, optimizer, epoch, args, learn_inv)
