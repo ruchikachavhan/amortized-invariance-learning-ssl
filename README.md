@@ -56,7 +56,7 @@ We implemented Amortised ViTs using invariances as prompt tokens. First, downloa
 ```
  python main_moco.py -a vit_base --lr 1.5e-4 --weight-decay 0.1 --stop-grad-conv1 --moco-t 0.2 --moco-m-cos --moco-mlp-dim 4096 --moco-dim 256  --batch-size 1024  --warmup-epochs=40 --epochs 300 --dist-url 'tcp://localhost:8008' --multiprocessing-distributed --world-size 1 --rank 0 --data ../../imagenet1k
 ```
-Download pretrained models from [here](). 
+Download pretrained models from [here](https://www.dropbox.com/s/aekxafpwpe5kgb3/hyper_resnet50_imagenet100-moco_2_checkpoint_0300.pth.tar?dl=0). 
 ## Downstream training
 
 We evaluate on several downstream datasets including [CIFAR10](https://pytorch.org/vision/stable/datasets.html), [CIFAR100](https://pytorch.org/vision/stable/datasets.html), [Caltech101](http://www.vision.caltech.edu/Image_Datasets/Caltech101/), [DTD](https://www.robots.ox.ac.uk/~vgg/data/dtd/), [Oxford-Flowers](https://www.robots.ox.ac.uk/~vgg/data/flowers/102/index.html), [Oxford-Pets](https://www.robots.ox.ac.uk/~vgg/data/pets/), [300w](https://ibug.doc.ic.ac.uk/resources/300-W/), [Leeds Sports Pose](https://dbcollection.readthedocs.io/en/latest/datasets/leeds_sports_pose_extended.html), and [CelebA](https://mmlab.ie.cuhk.edu.hk/projects/CelebA.html). We download these datasets in ```../TestDatasets/```. Training and test splits have been adopted from the [Transfer Learning Library](https://github.com/thuml/Transfer-Learning-Library/tree/master)
