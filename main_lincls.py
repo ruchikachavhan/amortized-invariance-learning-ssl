@@ -102,7 +102,7 @@ parser.add_argument('--data_root', default='../TestDatasets/', type = str)
 parser.add_argument('--pretrained', default='', type=str,
                     help='path to moco pretrained checkpoint')
 parser.add_argument('--few_shot_reg', default=None, type=float,
-                    help='Performs feew shot regression with given split size')
+                    help='Performs few shot regression with given split size')
 
 
 def main():
@@ -169,9 +169,8 @@ def main_worker(gpu, ngpus_per_node, args):
 
     # freeze all layers but the last fc
     for name, param in model.named_parameters():
-        if name not in ['%s.weight' % linear_keyword, '%s.bias' % linear_keyword]:
+        if name not in ['%s.weight' % linear_keyword, '%s.bias' % linear_keyword] and 'bn' not in name:
             param.requires_grad = False
-        print(name, param.requires_grad)
 
     # infer learning rate before changing batch size, not done for hyper-models
     init_lr = args.lr 
@@ -232,7 +231,7 @@ def main_worker(gpu, ngpus_per_node, args):
         learn_inv.requires_grad_()
         parameters = list(filter(lambda p: p.requires_grad, model.parameters()))
         optimizer_model = torch.optim.SGD(parameters, lr=init_lr, weight_decay = args.weight_decay, momentum=0.9)
-        optimizer_inv = torch.optim.SGD([learn_inv], lr = init_lr)
+        optimizer_inv = torch.optim.SGD([learn_inv], lr = 0.01) # Fixed lr for invariances with no weight decay
         optimizer = [optimizer_model, optimizer_inv]
 
     # optionally resume from a checkpoint
