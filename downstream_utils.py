@@ -9,7 +9,7 @@ import random
 import shutil
 import time
 import warnings
-
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.parallel
@@ -22,13 +22,13 @@ import torch.utils.data.distributed
 import torchvision.transforms as transforms
 import tllib.vision.datasets as datasets
 import torchvision.models as torchvision_models
-from sklearn.metrics import r2_score
+from sklearn.metrics import confusion_matrix, r2_score
 import vits
 import inspect
 from torch.utils.data import ConcatDataset
 from torch.autograd import Variable
 import hyper_resnet
-# Test dataset info
+# Import test datasets
 from test_datasets import CelebA, FacesInTheWild300W, LeedsSportsPose
 import wandb
 import json
@@ -303,7 +303,7 @@ def validate(val_loader, model, criterion, args, learn_inv):
                     output = nn.functional.normalize(output, dim=1)
                     target = nn.functional.normalize(target, dim=1)
 
-                loss = criterion(output, target)
+            loss = criterion(output, target)
 
             # measure accuracy and record loss
             if dataset_info[args.test_dataset]['mode'] == 'classification':
@@ -427,8 +427,14 @@ def accuracy(output, target, topk=(1,)):
         return res
 
 def mean_per_class_accuracy(num_classes, outputs, targets):
-    confusion_matrix = torch.zeros(num_classes, num_classes)
-    _, preds = torch.max(outputs, 1)
-    for t, p in zip(targets.view(-1), preds.view(-1)):
+    targets = targets.cpu().numpy()
+    outputs = outputs.argmax(1)
+    outputs = outputs.detach().cpu().numpy()
+    unique_classes = np.unique(targets)
+    all_class_acc = []
+    for cls in unique_classes:
+        class_acc = np.mean(outputs[targets == cls] == cls)
+        all_class_acc.append(class_acc)
+    return [np.mean(all_class_acc) * 100.]
         confusion_matrix[t.long(), p.long()] += 1
     return confusion_matrix.diag()/confusion_matrix.sum(1)
