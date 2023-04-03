@@ -203,15 +203,6 @@ def train(train_loader, model, criterion, optimizer, epoch, args, learn_inv):
         [batch_time, data_time, losses, top1, top5],
         prefix="Epoch: [{}]".format(epoch))
 
-    """
-    Switch to eval mode:
-    Under the protocol of linear classification on frozen features/models,
-    it is not legitimate to change any part of the pre-trained model.
-    BatchNorm in train mode may revise running mean/std (even if it receives
-    no gradient), which are part of the model parameters too.
-    """
-    model.eval()
-
     end = time.time()
 
     for i, (images, target) in enumerate(train_loader):
