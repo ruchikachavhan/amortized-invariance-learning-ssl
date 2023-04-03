@@ -230,8 +230,8 @@ def main_worker(gpu, ngpus_per_node, args):
         learn_inv = Variable(torch.tensor([0.5, 0.5])).cuda()
         learn_inv.requires_grad_()
         parameters = list(filter(lambda p: p.requires_grad, model.parameters()))
-        optimizer_model = torch.optim.SGD(parameters, lr=init_lr, weight_decay = args.weight_decay, momentum=0.9)
-        optimizer_inv = torch.optim.SGD([learn_inv], lr = 0.01) # Fixed lr for invariances with no weight decay
+        optimizer_model = torch.optim.Adam(parameters, lr=init_lr, weight_decay = args.weight_decay)
+        optimizer_inv = torch.optim.Adam([learn_inv], lr = 0.01) # Fixed lr for invariances with no weight decay
         optimizer = [optimizer_model, optimizer_inv]
 
     # optionally resume from a checkpoint
@@ -317,11 +317,11 @@ def main_worker(gpu, ngpus_per_node, args):
         epoch_results = {}
         if args.distributed:
             train_sampler.set_epoch(epoch)
-#         if args.baseline:
-#             adjust_learning_rate(optimizer, init_lr, epoch, args)
-#         else:
-#             adjust_learning_rate(optimizer[0], init_lr, epoch, args)
-#             adjust_learning_rate(optimizer[1], init_lr, epoch, args)
+        if args.baseline:
+            adjust_learning_rate(optimizer, epoch, args)
+        else:
+            adjust_learning_rate(optimizer[0], epoch, args)
+            adjust_learning_rate(optimizer[1], epoch, args)
 
         # train for one epoch
         train_acc1, _ = train(train_loader, model, criterion, optimizer, epoch, args, learn_inv)
