@@ -169,7 +169,7 @@ def main_worker(gpu, ngpus_per_node, args):
 
     # freeze all layers but the last fc
     for name, param in model.named_parameters():
-        if name not in ['%s.weight' % linear_keyword, '%s.bias' % linear_keyword] and 'bn' not in name:
+        if name not in ['%s.weight' % linear_keyword, '%s.bias' % linear_keyword]:
             param.requires_grad = False
 
     # infer learning rate before changing batch size, not done for hyper-models
