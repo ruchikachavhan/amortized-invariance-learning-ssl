@@ -102,7 +102,7 @@ class PromptVisionTransformerMoCo(VisionTransformer):
             if self.cls_token is not None:
                 x2 = torch.cat((self.cls_token.expand(x.shape[0], -1, -1), x), dim=1)
             x = x2 + self.pos_embed
-            x = torch.cat([x, x1], dim = 1)
+            x = torch.cat([x1, x], dim = 1)
         return self.pos_drop(x)
 
     def forward_features(self, x, inv):
